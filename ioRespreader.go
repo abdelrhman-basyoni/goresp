@@ -56,6 +56,8 @@ func (r *RespIo) Read() (Value, error) {
 		return r.readBulk()
 	case INTEGER:
 		return r.readNumber()
+	case STRING:
+		return r.readString()
 	default:
 		fmt.Printf("Unknown type: %v", string(_type))
 		return Value{}, nil
@@ -102,6 +104,27 @@ func (r *RespIo) readBulk() (Value, error) {
 	r.reader.Read(Bulk)
 
 	v.Bulk = string(Bulk)
+
+	// Read the trailing CRLF
+	r.readLine()
+
+	return v, nil
+}
+func (r *RespIo) readString() (Value, error) {
+	v := Value{}
+
+	v.Typ = "string"
+
+	len, _, err := r.readInteger()
+	if err != nil {
+		return v, err
+	}
+
+	Str := make([]byte, len)
+
+	r.reader.Read(Str)
+
+	v.Str = string(Str)
 
 	// Read the trailing CRLF
 	r.readLine()
