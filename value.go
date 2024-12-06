@@ -18,17 +18,17 @@ type Value struct {
 // In this context, the Marshal function is responsible for converting a "Value" object into a byte representation that adheres to the RESP (REdis Serialization Protocol) format.
 func (v Value) Marshal() []byte {
 	switch v.Typ {
-	case "Array":
+	case "array":
 		return v.marshalArray()
-	case "Bulk":
+	case "bulk":
 		return v.marshalBulk()
-	case "String":
+	case "string":
 		return v.marshalString()
-	case "Int":
+	case "int":
 		return v.marshalNum()
-	case "Null":
+	case "null":
 		return v.marshallNull()
-	case "Error":
+	case "error":
 		return v.marshallError()
 	default:
 		return []byte{}
