@@ -15,21 +15,24 @@ func NewRespIo(rd io.Reader) *RespIo {
 	return &RespIo{reader: bufio.NewReader(rd)}
 }
 
-func (r *RespIo) readLine() (line []byte, n int, err error) {
+// it reads aline from the underlying reader, stooping at '\r and returning the line without the  trailing '\r\n'
+// it returns the line m number of bytes read,
+func (r *RespIo) readLine() (line []byte, numBytes int, err error) {
 	for {
 		b, err := r.reader.ReadByte()
 		if err != nil {
 			return nil, 0, err
 		}
-		n += 1
+		numBytes += 1
 		line = append(line, b)
 		if len(line) >= 2 && line[len(line)-2] == '\r' {
 			break
 		}
 	}
-	return line[:len(line)-2], n, nil
+	return line[:len(line)-2], numBytes, nil
 }
 
+// it reads  and parses the number value  used to parse the length of the bulk string $<length>\r\n<data>\r\n
 func (r *RespIo) readInteger() (x int, n int, err error) {
 	line, n, err := r.readLine()
 	if err != nil {
@@ -42,13 +45,13 @@ func (r *RespIo) readInteger() (x int, n int, err error) {
 	return int(i64), n, nil
 }
 
+// the main function the triggers the reading process on the io   resp and it returns a Value object
 func (r *RespIo) Read() (Value, error) {
 	_type, err := r.reader.ReadByte()
 
 	if err != nil {
 		return Value{}, err
 	}
-	fmt.Println(string(_type))
 	switch _type {
 	case ARRAY:
 		return r.readArray()
@@ -64,6 +67,7 @@ func (r *RespIo) Read() (Value, error) {
 	}
 }
 
+// reads and returns Value of type Array
 func (r *RespIo) readArray() (Value, error) {
 	v := Value{}
 	v.Typ = "array"
@@ -89,6 +93,7 @@ func (r *RespIo) readArray() (Value, error) {
 	return v, nil
 }
 
+// reads and returns Value of type Bulk
 func (r *RespIo) readBulk() (Value, error) {
 	v := Value{}
 
@@ -110,28 +115,21 @@ func (r *RespIo) readBulk() (Value, error) {
 
 	return v, nil
 }
+
+// reads and returns Value of type simple string
 func (r *RespIo) readString() (Value, error) {
+	line, _, err := r.readLine()
 	v := Value{}
-
 	v.Typ = "string"
+	v.Str = string(line)
 
-	len, _, err := r.readInteger()
 	if err != nil {
 		return v, err
 	}
-
-	Str := make([]byte, len)
-
-	r.reader.Read(Str)
-
-	v.Str = string(Str)
-
-	// Read the trailing CRLF
-	r.readLine()
-
 	return v, nil
 }
 
+// reads and returns Value of type number
 func (r *RespIo) readNumber() (Value, error) {
 	v := Value{}
 
@@ -153,25 +151,4 @@ func (r *RespIo) readNumber() (Value, error) {
 
 	v.Num = int16(n)
 	return v, nil
-}
-
-// Writer
-
-type Writer struct {
-	writer io.Writer
-}
-
-func NewWriter(w io.Writer) *Writer {
-	return &Writer{writer: w}
-}
-
-func (w *Writer) Write(v Value) error {
-	var bytes = v.Marshal()
-
-	_, err := w.writer.Write(bytes)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
