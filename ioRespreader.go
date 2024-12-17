@@ -179,7 +179,7 @@ func (r *RespIo) readNumber() (Value, error) {
 		return v, err
 	}
 
-	v.Num = int16(n)
+	v.Num = int64(n)
 	return v, nil
 }
 

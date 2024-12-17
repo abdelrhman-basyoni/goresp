@@ -1,6 +1,7 @@
 package goresp
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -54,5 +55,118 @@ func TestSerializeCommandWithUnicodeCharacters(t *testing.T) {
 
 	if string(result) != expected {
 		t.Errorf("SerializeCommand(%q) = %q, want %q", command, string(result), expected)
+	}
+}
+
+// SerializeValue Test
+
+func TestSerializeValueBulk(t *testing.T) {
+	input := Value{Typ: "bulk", Bulk: "test_bulk"}
+	expected := "test_bulk"
+
+	result := SerializeValue(input)
+
+	if result != expected {
+		t.Errorf("SerializeValue(%v) = %q, want %q", input, result, expected)
+	}
+}
+
+func TestSerializeValueString(t *testing.T) {
+	input := Value{Typ: "string", Str: "test_string"}
+	expected := "test_string"
+
+	result := SerializeValue(input)
+
+	if result != expected {
+		t.Errorf("SerializeValue(%v) = %q, want %q", input, result, expected)
+	}
+}
+
+func TestSerializeValueInt(t *testing.T) {
+	input := Value{Typ: "int", Num: 42}
+	expected := "42"
+
+	result := SerializeValue(input)
+
+	if result != expected {
+		t.Errorf("SerializeValue(%v) = %q, want %q", input, result, expected)
+	}
+}
+
+func TestSerializeValueEmptyArray(t *testing.T) {
+	input := Value{Typ: "array", Array: []Value{}}
+	expected := ""
+
+	result := SerializeValue(input)
+
+	if result != expected {
+		t.Errorf("SerializeValue(%v) = %q, want %q", input, result, expected)
+	}
+}
+
+func TestSerializeValueUnknownType(t *testing.T) {
+	input := Value{Typ: "unknown", Bulk: "test_unknown"}
+	expected := "test_unknown"
+
+	result := SerializeValue(input)
+
+	if result != expected {
+		t.Errorf("SerializeValue(%v) = %q, want %q", input, result, expected)
+	}
+}
+
+func TestSerializeValueNestedArray(t *testing.T) {
+	input := Value{
+		Typ: "array",
+		Array: []Value{
+			{Typ: "bulk", Bulk: "SET"},
+			{Typ: "bulk", Bulk: "key"},
+			{Typ: "array", Array: []Value{
+				{Typ: "int", Num: 1},
+				{Typ: "string", Str: "two"},
+				{Typ: "bulk", Bulk: "three"},
+			}},
+		},
+	}
+	expected := "SETkey1twothree"
+
+	result := SerializeValue(input)
+
+	if result != expected {
+		t.Errorf("SerializeValue(%v) = %q, want %q", input, result, expected)
+	}
+}
+
+func TestSerializeValueLargeInteger(t *testing.T) {
+	input := Value{Typ: "int", Num: 9223372036854775807} // Max int64 value
+	expected := "9223372036854775807"
+
+	result := SerializeValue(input)
+
+	if result != expected {
+		t.Errorf("SerializeValue(%v) = %q, want %q", input, result, expected)
+	}
+}
+
+func TestSerializeValueEmptyString(t *testing.T) {
+	input := Value{Typ: "string", Str: ""}
+	expected := ""
+
+	result := SerializeValue(input)
+
+	if result != expected {
+		t.Errorf("SerializeValue(%v) = %q, want %q", input, result, expected)
+	}
+}
+
+func TestSerializeValueVeryLongString(t *testing.T) {
+	longString := strings.Repeat("a", 1000000)
+	input := Value{Typ: "bulk", Bulk: longString}
+	expected := longString
+
+	result := SerializeValue(input)
+
+	if result != expected {
+		t.Errorf("SerializeValue(%v) = %q (length: %d), want %q (length: %d)", input, result[:100], len(result), expected[:100], len(expected))
 	}
 }

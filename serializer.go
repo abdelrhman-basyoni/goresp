@@ -22,8 +22,8 @@ func SerializeCommand(command string) []byte {
 	return newCommand.Marshal()
 }
 
-// SerializeReaderCommand takes resp Value and converts it to string
-func SerializeReaderCommand(res Value) string {
+// SerializeValue takes resp Value and converts it to string
+func SerializeValue(res Value) string {
 	//Todo: handle null and error
 	switch res.Typ {
 	case "bulk":
@@ -44,7 +44,7 @@ func SerializeReaderCommand(res Value) string {
 		{
 			var fullStr string
 			for _, value := range res.Array {
-				fullStr += SerializeReaderCommand(value)
+				fullStr += SerializeValue(value)
 			}
 
 			return fullStr

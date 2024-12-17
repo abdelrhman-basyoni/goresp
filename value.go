@@ -7,7 +7,7 @@ import (
 type Value struct {
 	Typ   string
 	Str   string
-	Num   int16
+	Num   int64
 	Bulk  string
 	Array []Value
 }
@@ -127,7 +127,7 @@ func NewErrorValue(message string) Value {
 	return val
 }
 
-func NewNumberValue(number int16) Value {
+func NewNumberValue(number int64) Value {
 
 	val := Value{Typ: "int", Num: number}
 
