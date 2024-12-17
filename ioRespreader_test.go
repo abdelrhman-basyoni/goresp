@@ -3,12 +3,12 @@ package goresp
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
 )
 
-// TODO: fix the problems with the test
 func TestRespIo_readArray_EmptyArray(t *testing.T) {
 	// we removed the prefix "*" because readArray starts after the Read function remove the message type first
 	input := "0\r\n"
@@ -90,7 +90,7 @@ func TestRespIo_readArray_NestedArrays(t *testing.T) {
 		t.Errorf("Expected first nested array length 3, got %d", len(firstNestedArray.Array))
 	}
 	for i, v := range firstNestedArray.Array {
-		if v.Typ != "integer" || v.Num != int16(i+1) {
+		if v.Typ != "integer" || v.Num != int64(i+1) {
 			t.Errorf("Expected element %d to be number %d, got type %s and value %d", i, i+1, v.Typ, v.Num)
 		}
 	}
@@ -195,7 +195,7 @@ func TestRespIo_readArray_UnexpectedEOF(t *testing.T) {
 		t.Errorf("Expected array length 2, got %d", len(result.Array))
 	}
 
-	expectedValues := []int16{1, 2}
+	expectedValues := []int64{1, 2}
 	for i, v := range result.Array {
 		if v.Typ != "integer" || v.Num != expectedValues[i] {
 			t.Errorf("Expected element %d to be number %d, got type %s and value %d", i, expectedValues[i], v.Typ, v.Num)
@@ -270,7 +270,6 @@ func TestRespIo_readArray_WithUnicodeCharacters(t *testing.T) {
 }
 
 // testing bulks
-
 func TestRespIo_readBulk_ZeroLength(t *testing.T) {
 	input := "0\r\n\r\n"
 	reader := NewRespIo(strings.NewReader(input))
@@ -489,5 +488,185 @@ func TestRespIo_readBulk_TrailingCRLF(t *testing.T) {
 	}
 	if nextByte != 'E' {
 		t.Errorf("Expected next byte to be 'E', got '%c'", nextByte)
+	}
+}
+
+// Testing Read String
+func TestRespIo_readString_SimpleString(t *testing.T) {
+	input := "+Hello, World!\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	// Consume the '+' character
+	_, err := reader.reader.ReadByte()
+	if err != nil {
+		t.Fatalf("Failed to consume '+' character: %v", err)
+	}
+
+	result, err := reader.readString()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "string" {
+		t.Errorf("Expected type to be 'string', got %s", result.Typ)
+	}
+
+	expectedStr := "Hello, World!"
+	if result.Str != expectedStr {
+		t.Errorf("Expected string value '%s', got '%s'", expectedStr, result.Str)
+	}
+}
+
+func TestRespIo_readString_EmptyString(t *testing.T) {
+	input := "+\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+	// Consume the '+' character
+	_, err := reader.reader.ReadByte()
+	if err != nil {
+		t.Fatalf("Failed to consume '+' character: %v", err)
+	}
+	result, err := reader.readString()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "string" {
+		t.Errorf("Expected type to be 'string', got %s", result.Typ)
+	}
+
+	if result.Str != "" {
+		t.Errorf("Expected empty string, got '%s'", result.Str)
+	}
+}
+func TestRespIo_readString_SpecialCharacters(t *testing.T) {
+	input := "+Hello, 世界! @#$%^&*()_+\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+	// Consume the '+' character
+	_, err := reader.reader.ReadByte()
+	if err != nil {
+		t.Fatalf("Failed to consume '+' character: %v", err)
+	}
+	result, err := reader.readString()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "string" {
+		t.Errorf("Expected type to be 'string', got %s", result.Typ)
+	}
+
+	expectedStr := "Hello, 世界! @#$%^&*()_+"
+	if result.Str != expectedStr {
+		t.Errorf("Expected string value '%s', got '%s'", expectedStr, result.Str)
+	}
+}
+func TestRespIo_readString_VeryLongString(t *testing.T) {
+	longString := strings.Repeat("a", 1000000) // 1 million characters
+	input := "+" + longString + "\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+	// Consume the '+' character
+	_, err := reader.reader.ReadByte()
+	if err != nil {
+		t.Fatalf("Failed to consume '+' character: %v", err)
+	}
+	result, err := reader.readString()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "string" {
+		t.Errorf("Expected type to be 'string', got %s", result.Typ)
+	}
+
+	if result.Str != longString {
+		t.Errorf("Expected string of length %d, got string of length %d", len(longString), len(result.Str))
+	}
+
+	if !strings.HasPrefix(result.Str, "aaaaa") {
+		t.Errorf("Expected string to start with 'aaaaa', got '%s'", result.Str[:5])
+	}
+
+	if !strings.HasSuffix(result.Str, "aaaaa") {
+		t.Errorf("Expected string to end with 'aaaaa', got '%s'", result.Str[len(result.Str)-5:])
+	}
+}
+func TestRespIo_readString_OnlyWhitespace(t *testing.T) {
+	input := "+  \r\n"
+	reader := NewRespIo(strings.NewReader(input))
+	// Consume the '+' character
+	_, err := reader.reader.ReadByte()
+	if err != nil {
+		t.Fatalf("Failed to consume '+' character: %v", err)
+	}
+	result, err := reader.readString()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "string" {
+		t.Errorf("Expected type to be 'string', got %s", result.Typ)
+	}
+
+	expectedStr := "  "
+	if result.Str != expectedStr {
+		t.Errorf("Expected string value '%s', got '%s'", expectedStr, result.Str)
+	}
+}
+func TestRespIo_readString_ImmediateEOF(t *testing.T) {
+	input := "+"
+	reader := NewRespIo(strings.NewReader(input))
+	// Consume the '+' character
+	_, err := reader.reader.ReadByte()
+	if err != nil {
+		t.Fatalf("Failed to consume '+' character: %v", err)
+	}
+	result, err := reader.readString()
+
+	if err == nil {
+		t.Error("Expected an error, got nil")
+	}
+
+	if !errors.Is(err, io.EOF) {
+		t.Errorf("Expected EOF error, got: %v", err)
+	}
+
+	if result.Typ != "string" {
+		t.Errorf("Expected type to be 'string', got %s", result.Typ)
+	}
+
+	if result.Str != "" {
+		t.Errorf("Expected empty string, got '%s'", result.Str)
+	}
+}
+func TestRespIo_readString_NonASCIICharacters(t *testing.T) {
+	input := "+Hello, 世界!\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+	// Consume the '+' character
+	_, err := reader.reader.ReadByte()
+	if err != nil {
+		t.Fatalf("Failed to consume '+' character: %v", err)
+	}
+	result, err := reader.readString()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "string" {
+		t.Errorf("Expected type to be 'string', got %s", result.Typ)
+	}
+
+	expectedStr := "Hello, 世界!"
+	if result.Str != expectedStr {
+		t.Errorf("Expected string value '%s', got '%s'", expectedStr, result.Str)
+	}
+
+	if len(result.Str) != 14 {
+		t.Errorf("Expected string length 13, got %d", len(result.Str))
 	}
 }
