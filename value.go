@@ -95,14 +95,14 @@ func (v Value) marshallNull() []byte {
 
 func NewSetValue(key, value string) Value {
 	arr := []Value{{Typ: "bulk", Bulk: "set"}, {Typ: "bulk", Bulk: key}, {Typ: "bulk", Bulk: value}}
-	val := Value{Typ: "Array", Array: arr}
+	val := Value{Typ: "array", Array: arr}
 
 	return val
 }
 
 func NewHsetValue(hash, key, value string) Value {
 	arr := []Value{{Typ: "bulk", Bulk: "hset"}, {Typ: "bulk", Bulk: key}, {Typ: "bulk", Bulk: key}, {Typ: "bulk", Bulk: value}}
-	val := Value{Typ: "Array", Array: arr}
+	val := Value{Typ: "array", Array: arr}
 
 	return val
 }
