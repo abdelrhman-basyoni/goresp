@@ -15,11 +15,16 @@ SerializeCommand: Converts a string command into RESP-formatted bytes.
 - SerializeReaderCommand: Converts a goresp.Value representing a command into RESP-formatted bytes.
 
 - RESP Marshaler: Converts a goresp.Value object into a RESP-formatted byte representation.
-Installation
+  
+# Installation
 
 Bash
 ```
 go get github.com/abdelrhman-basyoni/goresp
+```
+# Test
+```
+go test
 ```
 Use code with caution.
 
