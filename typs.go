@@ -8,6 +8,7 @@ const (
 	INTEGER = ':'
 	BULK    = '$'
 	ARRAY   = '*'
+	NULL    = '_'
 )
 
 type RespReader interface {

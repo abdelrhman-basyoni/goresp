@@ -29,6 +29,7 @@ func (r *RespIo) readLine() (line []byte, numBytes int, err error) {
 			break
 		}
 	}
+
 	return line[:len(line)-2], numBytes, nil
 }
 
@@ -61,6 +62,10 @@ func (r *RespIo) Read() (Value, error) {
 		return r.readNumber()
 	case STRING:
 		return r.readString()
+	case ERROR:
+		return r.readError()
+	case NULL:
+		return r.readNull()
 	default:
 		fmt.Printf("Unknown type: %v", string(_type))
 		return Value{}, nil
@@ -69,18 +74,23 @@ func (r *RespIo) Read() (Value, error) {
 
 // reads and returns Value of type Array
 func (r *RespIo) readArray() (Value, error) {
+
 	v := Value{}
 	v.Typ = "array"
 
 	// read length of Array
-	len, _, err := r.readInteger()
+	length, _, err := r.readInteger()
 	if err != nil {
 		return v, err
 	}
 
 	// foreach line, parse and read the value
+	if length < 0 {
+		return v, fmt.Errorf("Array length cant be negative")
+	}
+
 	v.Array = make([]Value, 0)
-	for i := 0; i < len; i++ {
+	for i := 0; i < length; i++ {
 		val, err := r.Read()
 		if err != nil {
 			return v, err
@@ -99,19 +109,46 @@ func (r *RespIo) readBulk() (Value, error) {
 
 	v.Typ = "bulk"
 
-	len, _, err := r.readInteger()
+	length, _, err := r.readInteger()
 	if err != nil {
 		return v, err
 	}
+	if length < 0 {
 
-	Bulk := make([]byte, len)
+		return v, fmt.Errorf("Bulk length cant be negative")
 
-	r.reader.Read(Bulk)
+	}
+
+	Bulk := make([]byte, length)
+
+	// to handle the extreme case if the length is bigger than 4096 which  the internal buffer for the bufio read
+	totalRead := 0
+	for totalRead < length {
+		n, err := r.reader.Read(Bulk[totalRead:])
+		if err != nil {
+			return v, fmt.Errorf("Error reading bulk data: %v", err)
+		}
+		if n == 0 {
+			return v, fmt.Errorf("Unexpected EOF: read %d bytes, expected %d bytes", totalRead, length)
+		}
+		totalRead += n
+	}
+
+	if err != nil {
+
+		return v, err
+	}
 
 	v.Bulk = string(Bulk)
 
 	// Read the trailing CRLF
-	r.readLine()
+	line, _, err := r.readLine()
+	if err != nil {
+		return v, fmt.Errorf("Error reading trailing CRLF: %v", err)
+	}
+	if string(line) != "" {
+		return v, fmt.Errorf("Expected CRLF after bulk data, but got '%s'", line)
+	}
 
 	return v, nil
 }
@@ -133,22 +170,39 @@ func (r *RespIo) readString() (Value, error) {
 func (r *RespIo) readNumber() (Value, error) {
 	v := Value{}
 
-	v.Typ = "bulk"
+	v.Typ = "integer"
 
-	len, _, err := r.readInteger()
-	if err != nil {
-		return v, err
-	}
+	line, _, err := r.readLine()
 
-	Num := make([]byte, len)
-
-	r.reader.Read(Num)
-
-	n, err := strconv.Atoi(string(Num))
+	n, err := strconv.Atoi(string(line))
 	if err != nil {
 		return v, err
 	}
 
 	v.Num = int16(n)
+	return v, nil
+}
+
+func (r *RespIo) readError() (Value, error) {
+	v := Value{}
+
+	v.Typ = "error"
+
+	line, _, err := r.readLine()
+
+	if err != nil {
+		return v, err
+	}
+
+	v.Str = string(line)
+	return v, nil
+
+}
+
+func (r *RespIo) readNull() (Value, error) {
+	v := Value{}
+	r.readLine()
+	v.Typ = "null"
+
 	return v, nil
 }

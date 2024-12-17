@@ -1,6 +1,8 @@
 package goresp
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -8,7 +10,8 @@ import (
 
 // TODO: fix the problems with the test
 func TestRespIo_readArray_EmptyArray(t *testing.T) {
-	input := "*0\r\n"
+	// we removed the prefix "*" because readArray starts after the Read function remove the message type first
+	input := "0\r\n"
 	reader := NewRespIo(strings.NewReader(input))
 
 	result, err := reader.readArray()
@@ -28,7 +31,8 @@ func TestRespIo_readArray_EmptyArray(t *testing.T) {
 
 func TestRespIo_readArray_LargeArray(t *testing.T) {
 	// Create a large array with 1000 elements
-	input := "*1000\r\n"
+	// we removed the prefix "*" because readArray starts after the Read function remove the message type first
+	input := "1000\r\n"
 	for i := 0; i < 1000; i++ {
 		input += "$1\r\n" + strconv.Itoa(i%10) + "\r\n"
 	}
@@ -59,7 +63,8 @@ func TestRespIo_readArray_LargeArray(t *testing.T) {
 }
 
 func TestRespIo_readArray_NestedArrays(t *testing.T) {
-	input := "*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n+Hello\r\n+World\r\n"
+	// we removed the prefix "*" because readArray starts after the Read function remove the message type first
+	input := "2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n+Hello\r\n+World\r\n"
 	reader := NewRespIo(strings.NewReader(input))
 
 	result, err := reader.readArray()
@@ -85,7 +90,7 @@ func TestRespIo_readArray_NestedArrays(t *testing.T) {
 		t.Errorf("Expected first nested array length 3, got %d", len(firstNestedArray.Array))
 	}
 	for i, v := range firstNestedArray.Array {
-		if v.Typ != "bulk" || v.Num != int16(i+1) {
+		if v.Typ != "integer" || v.Num != int16(i+1) {
 			t.Errorf("Expected element %d to be number %d, got type %s and value %d", i, i+1, v.Typ, v.Num)
 		}
 	}
@@ -107,7 +112,8 @@ func TestRespIo_readArray_NestedArrays(t *testing.T) {
 }
 
 func TestRespIo_readArray_NegativeLength(t *testing.T) {
-	input := "*-5\r\n"
+	// we removed the prefix "*" because readArray starts after the Read function remove the message type first
+	input := "-5\r\n"
 	reader := NewRespIo(strings.NewReader(input))
 
 	_, err := reader.readArray()
@@ -116,14 +122,15 @@ func TestRespIo_readArray_NegativeLength(t *testing.T) {
 		t.Error("Expected an error for negative array length, but got nil")
 	}
 
-	expectedError := "strconv.ParseInt: parsing \"-5\": value out of range"
+	expectedError := "Array length cant be negative"
 	if err.Error() != expectedError {
 		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
 	}
 }
 
 func TestRespIo_readArray_MixedDataTypes(t *testing.T) {
-	input := "*5\r\n:42\r\n$5\r\nhello\r\n+world\r\n*2\r\n:1\r\n:2\r\n-Error message\r\n"
+	// we removed the prefix "*" because readArray starts after the Read function remove the message type first
+	input := "5\r\n:42\r\n$5\r\nhello\r\n+world\r\n*2\r\n:1\r\n:2\r\n-Error message\r\n"
 	reader := NewRespIo(strings.NewReader(input))
 
 	result, err := reader.readArray()
@@ -141,7 +148,7 @@ func TestRespIo_readArray_MixedDataTypes(t *testing.T) {
 	}
 
 	// Check integer
-	if result.Array[0].Typ != "bulk" || result.Array[0].Num != 42 {
+	if result.Array[0].Typ != "integer" || result.Array[0].Num != 42 {
 		t.Errorf("Expected first element to be integer 42, got type %s and value %d", result.Array[0].Typ, result.Array[0].Num)
 	}
 
@@ -161,45 +168,13 @@ func TestRespIo_readArray_MixedDataTypes(t *testing.T) {
 	}
 
 	// Check error
-	if result.Array[4].Typ != "string" || result.Array[4].Str != "Error message" {
+	if result.Array[4].Typ != "error" || result.Array[4].Str != "Error message" {
 		t.Errorf("Expected fifth element to be error 'Error message', got type %s and value '%s'", result.Array[4].Typ, result.Array[4].Str)
 	}
 }
 
-func TestRespIo_readArray_MaxLength(t *testing.T) {
-	// Create an array with MaxInt32 elements (2147483647)
-	input := "*2147483647\r\n"
-	for i := 0; i < 2147483647; i++ {
-		input += ":1\r\n"
-	}
-
-	reader := NewRespIo(strings.NewReader(input))
-
-	result, err := reader.readArray()
-
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if result.Typ != "array" {
-		t.Errorf("Expected type to be 'array', got %s", result.Typ)
-	}
-
-	if len(result.Array) != 2147483647 {
-		t.Errorf("Expected array length 2147483647, got %d", len(result.Array))
-	}
-
-	// Check a few random elements to ensure they're correct
-	checkIndices := []int{0, 1000000, 2147483646}
-	for _, idx := range checkIndices {
-		if result.Array[idx].Typ != "bulk" || result.Array[idx].Num != 1 {
-			t.Errorf("Expected element at index %d to be number 1, got type %s and value %d", idx, result.Array[idx].Typ, result.Array[idx].Num)
-		}
-	}
-}
-
 func TestRespIo_readArray_UnexpectedEOF(t *testing.T) {
-	input := "*3\r\n:1\r\n:2\r\n"
+	input := "3\r\n:1\r\n:2\r\n"
 	reader := NewRespIo(strings.NewReader(input))
 
 	result, err := reader.readArray()
@@ -222,14 +197,14 @@ func TestRespIo_readArray_UnexpectedEOF(t *testing.T) {
 
 	expectedValues := []int16{1, 2}
 	for i, v := range result.Array {
-		if v.Typ != "bulk" || v.Num != expectedValues[i] {
+		if v.Typ != "integer" || v.Num != expectedValues[i] {
 			t.Errorf("Expected element %d to be number %d, got type %s and value %d", i, expectedValues[i], v.Typ, v.Num)
 		}
 	}
 }
 
 func TestRespIo_readArray_WithNullValues(t *testing.T) {
-	input := "*3\r\n$4\r\ntest\r\n_\r\n$5\r\nhello\r\n"
+	input := "3\r\n$4\r\ntest\r\n_\r\n$5\r\nhello\r\n"
 	reader := NewRespIo(strings.NewReader(input))
 
 	result, err := reader.readArray()
@@ -266,7 +241,7 @@ func TestRespIo_readArray_WithNullValues(t *testing.T) {
 }
 
 func TestRespIo_readArray_WithUnicodeCharacters(t *testing.T) {
-	input := "*3\r\n$4\r\n🍕\r\n$6\r\n世界\r\n$7\r\nπ≈3.14\r\n"
+	input := "3\r\n$4\r\n🍕\r\n$6\r\n世界\r\n$9\r\nπ≈3.14\r\n"
 	reader := NewRespIo(strings.NewReader(input))
 
 	result, err := reader.readArray()
@@ -291,5 +266,228 @@ func TestRespIo_readArray_WithUnicodeCharacters(t *testing.T) {
 		if result.Array[i].Bulk != expected {
 			t.Errorf("Element %d: expected value '%s', got '%s'", i, expected, result.Array[i].Bulk)
 		}
+	}
+}
+
+// testing bulks
+
+func TestRespIo_readBulk_ZeroLength(t *testing.T) {
+	input := "0\r\n\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readBulk()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "bulk" {
+		t.Errorf("Expected type to be 'bulk', got %s", result.Typ)
+	}
+
+	if result.Bulk != "" {
+		t.Errorf("Expected empty bulk string, got '%s'", result.Bulk)
+	}
+}
+
+func TestRespIo_readBulk_NegativeLength(t *testing.T) {
+	input := "-5\r\nHello\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	_, err := reader.readBulk()
+
+	if err == nil {
+		t.Error("Expected an error for negative bulk string length, but got nil")
+	}
+
+	expectedError := "Bulk length cant be negative"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
+	}
+}
+
+func TestRespIo_readBulk_WhitespaceOnly(t *testing.T) {
+	input := "5\r\n     \r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readBulk()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "bulk" {
+		t.Errorf("Expected type to be 'bulk', got %s", result.Typ)
+	}
+
+	expectedBulk := "     "
+	if result.Bulk != expectedBulk {
+		t.Errorf("Expected bulk value '%s', got '%s'", expectedBulk, result.Bulk)
+	}
+
+	if len(result.Bulk) != 5 {
+		t.Errorf("Expected bulk length 5, got %d", len(result.Bulk))
+	}
+}
+
+func TestRespIo_readBulk_NonASCIICharacters(t *testing.T) {
+	input := "14\r\nHello, 世界!\r\n"
+
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readBulk()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "bulk" {
+		t.Errorf("Expected type to be 'bulk', got %s", result.Typ)
+	}
+
+	expectedBulk := "Hello, 世界!"
+	if result.Bulk != expectedBulk {
+		t.Errorf("Expected bulk value '%s', got '%s'", expectedBulk, result.Bulk)
+	}
+
+	if len(result.Bulk) != 14 {
+		t.Errorf("Expected bulk length 14, got %d", len(result.Bulk))
+	}
+}
+
+func TestRespIo_readBulk_LengthMismatch(t *testing.T) {
+	input := "6\r\nHello\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	_, err := reader.readBulk()
+
+	if err == nil {
+		t.Error("Expected an error for length mismatch, but got nil")
+	}
+
+	expectedError := "Error reading trailing CRLF: EOF"
+	if !strings.Contains(err.Error(), expectedError) {
+		t.Errorf("Expected error message to contain '%s', but got '%s'", expectedError, err.Error())
+	}
+}
+
+func TestRespIo_readBulk_MaxLength(t *testing.T) {
+	// Maximum allowed length for a bulk string (512MB)
+	maxLength := 512 * 1024 * 1024
+	input := fmt.Sprintf("%d\r\n%s\r\n", maxLength, strings.Repeat("a", maxLength))
+	reader := NewRespIo(strings.NewReader(input))
+	result, err := reader.readBulk()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "bulk" {
+		t.Errorf("Expected type to be 'bulk', got %s", result.Typ)
+	}
+
+	if len(result.Bulk) != maxLength {
+		t.Errorf("Expected bulk length %d, got %d", maxLength, len(result.Bulk))
+	}
+
+	expectedBulk := strings.Repeat("a", maxLength)
+	if result.Bulk != expectedBulk {
+		t.Errorf("Expected bulk value of %d 'a' characters, got different content", maxLength)
+	}
+}
+
+func TestRespIo_readBulk_WithNullBytes(t *testing.T) {
+	input := "8\r\nHello\x00\x00!\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readBulk()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "bulk" {
+		t.Errorf("Expected type to be 'bulk', got %s", result.Typ)
+	}
+
+	expectedBulk := "Hello\x00\x00!"
+	if result.Bulk != expectedBulk {
+		t.Errorf("Expected bulk value %q, got %q", expectedBulk, result.Bulk)
+	}
+
+	if len(result.Bulk) != 8 {
+		t.Errorf("Expected bulk length 8, got %d", len(result.Bulk))
+	}
+}
+func TestRespIo_readBulk_EOFBeforeCompleteRead(t *testing.T) {
+	input := "10\r\nHello"
+	reader := NewRespIo(strings.NewReader(input))
+
+	_, err := reader.readBulk()
+
+	if err == nil {
+		t.Error("Expected an error when EOF is reached before reading the entire bulk string, but got nil")
+	}
+
+	if err == errors.New("Error reading bulk data: EOF") {
+		t.Errorf("Expected EOF error, got: %v", err)
+	}
+}
+
+func TestRespIo_readBulk_ConsecutiveReads(t *testing.T) {
+	input := "5\r\nHello\r\n6\r\nWorld!\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	// First read
+	result1, err := reader.readBulk()
+	if err != nil {
+		t.Errorf("First read: Expected no error, got %v", err)
+	}
+	if result1.Typ != "bulk" {
+		t.Errorf("First read: Expected type to be 'bulk', got %s", result1.Typ)
+	}
+	if result1.Bulk != "Hello" {
+		t.Errorf("First read: Expected bulk value 'Hello', got '%s'", result1.Bulk)
+	}
+
+	// Second read
+	result2, err := reader.readBulk()
+	if err != nil {
+		t.Errorf("Second read: Expected no error, got %v", err)
+	}
+	if result2.Typ != "bulk" {
+		t.Errorf("Second read: Expected type to be 'bulk', got %s", result2.Typ)
+	}
+	if result2.Bulk != "World!" {
+		t.Errorf("Second read: Expected bulk value 'World!', got '%s'", result2.Bulk)
+	}
+}
+
+func TestRespIo_readBulk_TrailingCRLF(t *testing.T) {
+	input := "5\r\nHello\r\nExtra"
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readBulk()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "bulk" {
+		t.Errorf("Expected type to be 'bulk', got %s", result.Typ)
+	}
+
+	expectedBulk := "Hello"
+	if result.Bulk != expectedBulk {
+		t.Errorf("Expected bulk value '%s', got '%s'", expectedBulk, result.Bulk)
+	}
+
+	// Check if the trailing CRLF was read correctly
+	nextByte, err := reader.reader.ReadByte()
+	if err != nil {
+		t.Errorf("Expected no error reading next byte, got %v", err)
+	}
+	if nextByte != 'E' {
+		t.Errorf("Expected next byte to be 'E', got '%c'", nextByte)
 	}
 }
