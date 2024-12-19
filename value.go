@@ -1,6 +1,7 @@
 package goresp
 
 import (
+	"fmt"
 	"strconv"
 )
 
@@ -101,7 +102,8 @@ func NewSetValue(key, value string) Value {
 }
 
 func NewHsetValue(hash, key, value string) Value {
-	arr := []Value{{Typ: "bulk", Bulk: "hset"}, {Typ: "bulk", Bulk: key}, {Typ: "bulk", Bulk: key}, {Typ: "bulk", Bulk: value}}
+	fmt.Println(hash)
+	arr := []Value{{Typ: "bulk", Bulk: "hset"}, {Typ: "bulk", Bulk: hash}, {Typ: "bulk", Bulk: key}, {Typ: "bulk", Bulk: value}}
 	val := Value{Typ: "array", Array: arr}
 
 	return val
