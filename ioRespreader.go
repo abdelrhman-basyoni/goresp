@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 )
 
 type RespIo struct {
@@ -174,7 +175,7 @@ func (r *RespIo) readNumber() (Value, error) {
 
 	line, _, err := r.readLine()
 
-	n, err := strconv.Atoi(string(line))
+	n, err := strconv.Atoi(strings.TrimSpace(string(line)))
 	if err != nil {
 		return v, err
 	}
