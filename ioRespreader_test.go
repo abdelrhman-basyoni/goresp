@@ -670,3 +670,163 @@ func TestRespIo_readString_NonASCIICharacters(t *testing.T) {
 		t.Errorf("Expected string length 13, got %d", len(result.Str))
 	}
 }
+
+// Testing ReadNumber
+func TestRespIo_readNumber_ValidPositiveInteger(t *testing.T) {
+	input := "42\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readNumber()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "integer" {
+		t.Errorf("Expected type to be 'integer', got %s", result.Typ)
+	}
+
+	if result.Num != 42 {
+		t.Errorf("Expected value 42, got %d", result.Num)
+	}
+}
+func TestRespIo_readNumber_ValidNegativeInteger(t *testing.T) {
+	input := "-42\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readNumber()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "integer" {
+		t.Errorf("Expected type to be 'integer', got %s", result.Typ)
+	}
+
+	expectedNum := int64(-42)
+	if result.Num != expectedNum {
+		t.Errorf("Expected number %d, got %d", expectedNum, result.Num)
+	}
+}
+func TestRespIo_readNumber_Zero(t *testing.T) {
+	input := ":0\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	// Skip the first byte (":") as it's handled by the Read() method
+	reader.reader.ReadByte()
+
+	result, err := reader.readNumber()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "integer" {
+		t.Errorf("Expected type to be 'integer', got %s", result.Typ)
+	}
+
+	if result.Num != 0 {
+		t.Errorf("Expected number value 0, got %d", result.Num)
+	}
+}
+func TestRespIo_readNumber_FloatingPoint(t *testing.T) {
+	input := "3.14\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	_, err := reader.readNumber()
+
+	if err == nil {
+		t.Error("Expected an error for floating-point input, but got nil")
+	}
+
+	expectedError := "strconv.Atoi: parsing \"3.14\": invalid syntax"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
+	}
+}
+func TestRespIo_readNumber_VeryLargeInteger(t *testing.T) {
+	input := "9223372036854775807\r\n" // int64 max value
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readNumber()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "integer" {
+		t.Errorf("Expected type to be 'integer', got %s", result.Typ)
+	}
+
+	expectedNum := int64(9223372036854775807)
+	if result.Num != expectedNum {
+		t.Errorf("Expected number %d, got %d", expectedNum, result.Num)
+	}
+}
+func TestRespIo_readNumber_LeadingWhitespace(t *testing.T) {
+	input := "  42\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readNumber()
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result.Typ != "integer" {
+		t.Errorf("Expected type to be 'integer', got %s", result.Typ)
+	}
+
+	expectedNum := int64(42)
+	if result.Num != expectedNum {
+		t.Errorf("Expected number %d, got %d", expectedNum, result.Num)
+	}
+}
+
+func TestRespIo_readNumber_EmptyInput(t *testing.T) {
+	input := "\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readNumber()
+
+	if err == nil {
+		t.Error("Expected an error for empty input, but got nil")
+	}
+
+	if result.Typ != "integer" {
+		t.Errorf("Expected type to be 'integer', got %s", result.Typ)
+	}
+
+	if result.Num != 0 {
+		t.Errorf("Expected Num to be 0, got %d", result.Num)
+	}
+
+	expectedError := "strconv.Atoi: parsing \"\": invalid syntax"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
+	}
+}
+func TestRespIo_readNumber_NonNumericInput(t *testing.T) {
+	input := "abc\r\n"
+	reader := NewRespIo(strings.NewReader(input))
+
+	result, err := reader.readNumber()
+
+	if err == nil {
+		t.Error("Expected an error for non-numeric input, but got nil")
+	}
+
+	if result.Typ != "integer" {
+		t.Errorf("Expected type to be 'integer', got %s", result.Typ)
+	}
+
+	if result.Num != 0 {
+		t.Errorf("Expected Num to be 0, got %d", result.Num)
+	}
+
+	expectedError := "strconv.Atoi: parsing \"abc\": invalid syntax"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
+	}
+}
